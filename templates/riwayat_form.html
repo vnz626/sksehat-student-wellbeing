@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if catatan else 'Tambah' }} Catatan{% endblock %}
+{% block content %}
+<h1>{{ 'Edit' if catatan else 'Tambah' }} Catatan</h1>
+<form method="post">
+  <p>
+    <label>Tanggal<br>
+      <input type="date" name="tanggal" value="{{ form.get('tanggal', '') }}" required>
+    </label>
+  </p>
+  <p>
+    <label>Tidur (jam, 0–24)<br>
+      <input type="number" name="tidur" min="0" max="24" step="0.5" value="{{ form.get('tidur', '') }}">
+    </label>
+  </p>
+  <p>
+    <label>Air (gelas, 0–30)<br>
+      <input type="number" name="air" min="0" max="30" step="1" value="{{ form.get('air', '') }}">
+    </label>
+  </p>
+  <p>
+    <label>Olahraga (menit, 0–600)<br>
+      <input type="number" name="olahraga" min="0" max="600" step="1" value="{{ form.get('olahraga', '') }}">
+    </label>
+  </p>
+  <p>
+    <label>Stres (1–10)<br>
+      <input type="number" name="stres" min="1" max="10" step="1" value="{{ form.get('stres', '') }}">
+    </label>
+  </p>
+  <p>
+    <button type="submit">Simpan</button>
+    <a href="{{ url_for('main.riwayat') }}">Batal</a>
+  </p>
+</form>
+{% endblock %}

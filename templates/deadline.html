@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% set LABEL_BOBOT = {1: 'Ringan', 2: 'Sedang', 3: 'Berat'} %}
+{% block title %}Deadline{% endblock %}
+{% block content %}
+<h1>Deadline</h1>
+
+<h2>Tambah deadline</h2>
+<form method="post" action="{{ url_for('main.deadline') }}">
+  {% include "_deadline_fields.html" %}
+  <p><button type="submit">Tambah</button></p>
+</form>
+
+<h2>Belum selesai</h2>
+{% if aktif %}
+  <table border="1" cellpadding="4">
+    <thead><tr><th>Tanggal</th><th>Judul</th><th>Bobot</th><th>Sisa</th><th>Aksi</th></tr></thead>
+    <tbody>
+      {% for d in aktif %}
+        {% set sisa = (d.tanggal - hari_ini).days %}
+        <tr>
+          <td>{{ d.tanggal.strftime('%d-%m-%Y') }}</td>
+          <td>{{ d.judul }}</td>
+          <td>{{ LABEL_BOBOT[d.bobot] }}</td>
+          <td>{% if sisa > 0 %}H-{{ sisa }}{% elif sisa == 0 %}Hari ini{% else %}Lewat {{ -sisa }} hari{% endif %}</td>
+          <td>
+            <form method="post" action="{{ url_for('main.deadline_selesai', id=d.id) }}" style="display:inline">
+              <button type="submit">Tandai selesai</button>
+            </form>
+            <a href="{{ url_for('main.deadline_edit', id=d.id) }}">Edit</a>
+            <form method="post" action="{{ url_for('main.deadline_hapus', id=d.id) }}" style="display:inline"
+                  onsubmit="return confirm('Hapus deadline ini?');">
+              <button type="submit">Hapus</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <p>Tidak ada deadline aktif.</p>
+{% endif %}
+
+<h2>Sudah selesai</h2>
+{% if selesai %}
+  <table border="1" cellpadding="4">
+    <thead><tr><th>Tanggal</th><th>Judul</th><th>Bobot</th><th>Aksi</th></tr></thead>
+    <tbody>
+      {% for d in selesai %}
+        <tr>
+          <td>{{ d.tanggal.strftime('%d-%m-%Y') }}</td>
+          <td>{{ d.judul }}</td>
+          <td>{{ LABEL_BOBOT[d.bobot] }}</td>
+          <td>
+            <form method="post" action="{{ url_for('main.deadline_selesai', id=d.id) }}" style="display:inline">
+              <button type="submit">Batal selesai</button>
+            </form>
+            <a href="{{ url_for('main.deadline_edit', id=d.id) }}">Edit</a>
+            <form method="post" action="{{ url_for('main.deadline_hapus', id=d.id) }}" style="display:inline"
+                  onsubmit="return confirm('Hapus deadline ini?');">
+              <button type="submit">Hapus</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <p>Belum ada.</p>
+{% endif %}
+{% endblock %}

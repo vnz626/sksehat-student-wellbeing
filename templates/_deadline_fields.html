@@ -1,0 +1,20 @@
+{# Field form deadline, dipakai di halaman tambah dan edit #}
+<p>
+  <label>Judul<br>
+    <input type="text" name="judul" maxlength="150" value="{{ form.get('judul', '') }}" required>
+  </label>
+</p>
+<p>
+  <label>Tanggal<br>
+    <input type="date" name="tanggal" value="{{ form.get('tanggal', '') }}" required>
+  </label>
+</p>
+<p>
+  <label>Bobot<br>
+    <select name="bobot">
+      {% for nilai, label in [('1', 'Ringan'), ('2', 'Sedang'), ('3', 'Berat')] %}
+        <option value="{{ nilai }}" {{ 'selected' if form.get('bobot', '2')|string == nilai }}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+</p>

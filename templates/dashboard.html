@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Beranda{% endblock %}
+{% block content %}
+<h1>SKSehat</h1>
+
+<h2>Hari ini ({{ tanggal.strftime('%d-%m-%Y') }})</h2>
+{% if hari_ini %}
+  <ul>
+    <li>Tidur: {{ hari_ini.tidur if hari_ini.tidur is not none else '-' }} jam</li>
+    <li>Air: {{ hari_ini.air }}/8 gelas</li>
+    <li>Olahraga: {{ hari_ini.olahraga }} menit</li>
+    <li>Stres: {{ hari_ini.stres if hari_ini.stres is not none else '-' }}/10</li>
+  </ul>
+{% else %}
+  <p>Belum ada catatan hari ini. <a href="{{ url_for('main.riwayat_tambah') }}">Tambah catatan</a></p>
+{% endif %}
+
+<h2>Prakiraan Cuaca Mental</h2>
+<p>Belum tersedia.</p>
+
+<p><a href="{{ url_for('main.riwayat') }}">Lihat riwayat catatan</a></p>
+{% endblock %}

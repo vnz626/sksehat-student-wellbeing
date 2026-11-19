@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Jadwal{% endblock %}
+{% block content %}
+<h1>Jadwal Kuliah</h1>
+{% if daftar %}
+  <table border="1" cellpadding="4">
+    <thead>
+      <tr><th>Hari</th><th>Jam</th><th>Mata kuliah</th><th>Ruang</th><th>Semester</th></tr>
+    </thead>
+    <tbody>
+      {% for j in daftar %}
+        <tr>
+          <td>{{ nama_hari[j.hari] }}</td>
+          <td>{{ j.jam_mulai.strftime('%H:%M') }}–{{ j.jam_selesai.strftime('%H:%M') }}</td>
+          <td>{{ j.matkul }}</td>
+          <td>{{ j.ruang or '-' }}</td>
+          <td>{{ j.semester or '-' }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <p>Belum ada jadwal kuliah.</p>
+{% endif %}
+{% endblock %}

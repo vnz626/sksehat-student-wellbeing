@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Edit Deadline{% endblock %}
+{% block content %}
+<h1>Edit Deadline</h1>
+<form method="post">
+  {% include "_deadline_fields.html" %}
+  <p>
+    <button type="submit">Simpan</button>
+    <a href="{{ url_for('main.deadline') }}">Batal</a>
+  </p>
+</form>
+{% endblock %}

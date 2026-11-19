@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}SKSehat{% endblock %} · SKSehat</title>
+</head>
+<body>
+  <nav>
+    <a href="{{ url_for('main.dashboard') }}">Beranda</a> |
+    <a href="{{ url_for('main.chat') }}">Chat</a> |
+    <a href="{{ url_for('main.jadwal') }}">Jadwal</a> |
+    <a href="{{ url_for('main.deadline') }}">Deadline</a> |
+    <a href="{{ url_for('main.insight') }}">Insight</a> |
+    <a href="{{ url_for('main.wrapped') }}">Wrapped</a> |
+    <a href="{{ url_for('main.riwayat') }}">Riwayat</a> |
+    <a href="{{ url_for('profil.profil') }}">Profil</a>
+  </nav>
+  <hr>
+
+  {# Pesan sukses / error dari flash() #}
+  {% with pesan = get_flashed_messages(with_categories=true) %}
+    {% if pesan %}
+      <ul>
+        {% for kategori, isi in pesan %}
+          <li><strong>{{ 'Gagal' if kategori == 'error' else 'OK' }}:</strong> {{ isi }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  {% endwith %}
+
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+
+  <hr>
+  <footer>
+    <small>SKSehat bukan alat diagnosis medis. Jika stres terasa berat, hubungi konselor kampus atau tenaga profesional.</small>
+  </footer>
+</body>
+</html>

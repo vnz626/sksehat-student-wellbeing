@@ -19,13 +19,12 @@ def create_app(config_class=Config):
     # Hubungkan SQLAlchemy ke aplikasi
     db.init_app(app)
 
-    # Blueprint (routes/profil.py, routes/main.py, routes/api.py)
-    # didaftarkan di sini pada tahap-tahap berikutnya.
+    # Daftarkan blueprint halaman (routes/api.py menyusul di tahap berikutnya)
+    from routes.main import main_bp
+    from routes.profil import profil_bp
 
-    @app.route("/")
-    def index():
-        # Halaman sementara untuk memastikan kerangka project berjalan
-        return "<h1>SKSehat</h1><p>Asisten kesehatan untuk mahasiswa.</p>"
+    app.register_blueprint(main_bp)
+    app.register_blueprint(profil_bp)
 
     register_commands(app)
     return app

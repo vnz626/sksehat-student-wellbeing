@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Profil{% endblock %}
+{% block content %}
+<h1>Profil</h1>
+
+<form method="post" action="{{ url_for('profil.profil') }}">
+  <p>
+    <label>Nama panggilan<br>
+      <input type="text" name="nama" maxlength="100" value="{{ form.get('nama', '') }}" required>
+    </label>
+  </p>
+  <p>
+    <label>Jam check-in malam<br>
+      <input type="time" name="jam_checkin" value="{{ form.get('jam_checkin', '') }}" required>
+    </label>
+  </p>
+  <p>
+    <label>Jam prakiraan pagi<br>
+      <input type="time" name="jam_prakiraan" value="{{ form.get('jam_prakiraan', '') }}" required>
+    </label>
+  </p>
+  <p><button type="submit">Simpan</button></p>
+</form>
+
+<h2>Telegram</h2>
+{% if profil.telegram_chat_id %}
+  <p>Tertaut ke chat ID {{ profil.telegram_chat_id }}.</p>
+  <form method="post" action="{{ url_for('profil.putuskan_telegram') }}"
+        onsubmit="return confirm('Putuskan tautan Telegram?');">
+    <button type="submit">Putuskan tautan</button>
+  </form>
+{% else %}
+  {% if profil.kode_tautan %}
+    <p>Kirim pesan ini ke bot SKSehat: <code>/start {{ profil.kode_tautan }}</code></p>
+  {% endif %}
+  <form method="post" action="{{ url_for('profil.tautkan_telegram') }}">
+    <button type="submit">{{ 'Buat kode baru' if profil.kode_tautan else 'Hubungkan Telegram' }}</button>
+  </form>
+{% endif %}
+{% endblock %}
