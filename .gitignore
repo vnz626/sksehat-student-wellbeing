@@ -1,2 +1,29 @@
 # Dokumen rancangan sistem lokal (tidak di-push ke repository)
 Rancangan Sistem*.md
+
+# Kunci rahasia
+.env
+
+# Database lokal
+*.db
+instance/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Editor & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Log
+*.log

@@ -1,0 +1,19 @@
+# Web
+flask>=3.0
+flask-sqlalchemy>=3.1
+python-dotenv>=1.0
+
+# Data & machine learning
+numpy>=1.26
+pandas>=2.2
+scikit-learn>=1.5
+openpyxl>=3.1          # dibutuhkan pandas untuk membaca file Excel jadwal
+
+# LLM (Groq, format OpenAI-compatible)
+openai>=1.40
+
+# Bot Telegram
+python-telegram-bot[job-queue]>=21.0
+
+# Impor jadwal dari file .ics
+icalendar>=5.0
