@@ -2,10 +2,25 @@
 {% block title %}Jadwal{% endblock %}
 {% block content %}
 <h1>Jadwal Kuliah</h1>
+
+{% if semua_semester|length > 1 %}
+  <p>
+    Semester:
+    {% for s in semua_semester %}
+      {% if s == semester_dipilih %}<strong>{{ s or 'Tanpa semester' }}</strong>
+      {% else %}<a href="{{ url_for('main.jadwal', semester=s or '') }}">{{ s or 'Tanpa semester' }}</a>{% endif %}
+      {% if s == semester_aktif %}(aktif){% endif %}
+      {% if not loop.last %} | {% endif %}
+    {% endfor %}
+  </p>
+{% elif semester_dipilih %}
+  <p>Semester {{ semester_dipilih }}</p>
+{% endif %}
+
 {% if daftar %}
   <table border="1" cellpadding="4">
     <thead>
-      <tr><th>Hari</th><th>Jam</th><th>Mata kuliah</th><th>Ruang</th><th>Semester</th></tr>
+      <tr><th>Hari</th><th>Jam</th><th>Mata kuliah</th><th>Ruang</th><th>Aksi</th></tr>
     </thead>
     <tbody>
       {% for j in daftar %}
@@ -14,12 +29,65 @@
           <td>{{ j.jam_mulai.strftime('%H:%M') }}–{{ j.jam_selesai.strftime('%H:%M') }}</td>
           <td>{{ j.matkul }}</td>
           <td>{{ j.ruang or '-' }}</td>
-          <td>{{ j.semester or '-' }}</td>
+          <td>
+            <a href="{{ url_for('main.jadwal_edit', id=j.id) }}">Edit</a>
+            <form method="post" action="{{ url_for('main.jadwal_hapus', id=j.id) }}" style="display:inline"
+                  onsubmit="return confirm('Hapus jadwal {{ j.matkul }}?');">
+              <button type="submit">Hapus</button>
+            </form>
+          </td>
         </tr>
       {% endfor %}
     </tbody>
   </table>
 {% else %}
-  <p>Belum ada jadwal kuliah.</p>
+  <p>Belum ada jadwal kuliah. Impor dari file atau tambahkan manual di bawah.</p>
 {% endif %}
+
+<h2>Beban kuliah 7 hari ke depan</h2>
+<table border="1" cellpadding="4">
+  <thead>
+    <tr><th>Tanggal</th><th>Jam kuliah</th><th>Jumlah matkul</th><th>Kuliah pagi</th><th>Jeda terpanjang</th></tr>
+  </thead>
+  <tbody>
+    {% for b in beban %}
+      <tr>
+        <td>{{ nama_hari[b.tanggal.weekday()] }}, {{ b.tanggal.strftime('%d-%m-%Y') }}</td>
+        <td>{{ b.jam_kuliah }} jam</td>
+        <td>{{ b.jumlah_matkul }}</td>
+        <td>{{ 'Ya' if b.kuliah_pagi else 'Tidak' }}</td>
+        <td>{{ b.jeda_terpanjang }} jam</td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>Impor dari file</h2>
+<p>CSV/Excel dengan kolom <code>matkul, hari, jam_mulai, jam_selesai, ruang</code>, atau file <code>.ics</code> dari Google Calendar.</p>
+<form method="post" action="{{ url_for('main.jadwal') }}" enctype="multipart/form-data">
+  <input type="hidden" name="aksi" value="impor">
+  <p>
+    <label>File jadwal<br>
+      <input type="file" name="berkas" accept=".csv,.xlsx,.xls,.ics" required>
+    </label>
+  </p>
+  <p>
+    <label>Semester<br>
+      <input type="text" name="semester" maxlength="20" list="daftar-semester"
+             placeholder="Ganjil 2026/2027" value="{{ semester_aktif or '' }}">
+    </label>
+  </p>
+  <p><button type="submit">Impor</button></p>
+</form>
+
+<h2>Tambah manual</h2>
+<form method="post" action="{{ url_for('main.jadwal') }}">
+  <input type="hidden" name="aksi" value="manual">
+  {% include "_jadwal_fields.html" %}
+  <p><button type="submit">Tambah</button></p>
+</form>
+
+<datalist id="daftar-semester">
+  {% for s in semua_semester if s %}<option value="{{ s }}">{% endfor %}
+</datalist>
 {% endblock %}

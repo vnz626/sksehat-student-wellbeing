@@ -1,0 +1,34 @@
+{# Field form jadwal manual, dipakai di halaman jadwal dan edit jadwal #}
+<p>
+  <label>Mata kuliah<br>
+    <input type="text" name="matkul" maxlength="150" value="{{ form.get('matkul', '') }}" required>
+  </label>
+</p>
+<p>
+  <label>Hari<br>
+    <select name="hari">
+      {% for i in range(6) %}
+        <option value="{{ i }}" {{ 'selected' if form.get('hari', '0')|string == i|string }}>{{ nama_hari[i] }}</option>
+      {% endfor %}
+    </select>
+  </label>
+</p>
+<p>
+  <label>Jam mulai<br>
+    <input type="time" name="jam_mulai" value="{{ form.get('jam_mulai', '') }}" required>
+  </label>
+  <label>Jam selesai<br>
+    <input type="time" name="jam_selesai" value="{{ form.get('jam_selesai', '') }}" required>
+  </label>
+</p>
+<p>
+  <label>Ruang (opsional)<br>
+    <input type="text" name="ruang" maxlength="50" value="{{ form.get('ruang', '') }}">
+  </label>
+</p>
+<p>
+  <label>Semester<br>
+    <input type="text" name="semester" maxlength="20" list="daftar-semester"
+           placeholder="Ganjil 2026/2027" value="{{ form.get('semester', '') }}">
+  </label>
+</p>

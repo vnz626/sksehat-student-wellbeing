@@ -9,10 +9,10 @@ from datetime import date, datetime
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 
 from models import DEFAULT_USER_ID, CatatanHarian, Deadline, JadwalKuliah, db
+from services import jadwal as layanan_jadwal
+from services.jadwal import NAMA_HARI
 
 main_bp = Blueprint("main", __name__)
-
-NAMA_HARI = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
 
 
 class ValidasiError(ValueError):
@@ -94,15 +94,139 @@ def chat():
     return render_template("chat.html")
 
 
+# ---------------------------------------------------------------------------
+# Jadwal kuliah: input manual, impor CSV/Excel/.ics, edit, hapus
+# ---------------------------------------------------------------------------
+
+def _jadwal_atau_404(id):
+    return JadwalKuliah.query.filter_by(id=id, user_id=DEFAULT_USER_ID).first_or_404()
+
+
+def _ambil_semester(form):
+    semester = (form.get("semester") or "").strip() or None
+    if semester and len(semester) > 20:
+        raise ValidasiError("Semester maksimal 20 karakter.")
+    return semester
+
+
+def validasi_jadwal_manual(form):
+    try:
+        sesi = layanan_jadwal.validasi_sesi({
+            "matkul": form.get("matkul"),
+            "hari": form.get("hari"),
+            "jam_mulai": form.get("jam_mulai"),
+            "jam_selesai": form.get("jam_selesai"),
+            "ruang": form.get("ruang"),
+        })
+    except ValueError as e:
+        pesan = str(e)
+        raise ValidasiError(pesan[:1].upper() + pesan[1:] + ".")
+    return sesi, _ambil_semester(form)
+
+
+def _render_jadwal(form=None, status=200):
+    # Halaman bisa menampilkan semester lain lewat ?semester=...; default semester aktif
+    aktif = layanan_jadwal.semester_aktif()
+    semua_semester = layanan_jadwal.daftar_semester()
+    dipilih = request.args.get("semester", aktif)
+    if dipilih not in semua_semester:
+        dipilih = aktif
+    beban = layanan_jadwal.beban_kuliah_rentang(date.today(), 7) if aktif or semua_semester else []
+    return (
+        render_template(
+            "jadwal.html",
+            daftar=layanan_jadwal.jadwal_semester(dipilih),
+            semester_dipilih=dipilih,
+            semester_aktif=aktif,
+            semua_semester=semua_semester,
+            beban=beban,
+            form=form or {"semester": aktif or ""},
+            nama_hari=NAMA_HARI,
+        ),
+        status,
+    )
+
+
 @main_bp.route("/jadwal", methods=["GET", "POST"])
 def jadwal():
-    # Impor dan edit jadwal dikerjakan di tahap 6-7; sekarang hanya menampilkan
-    daftar = (
-        JadwalKuliah.query.filter_by(user_id=DEFAULT_USER_ID)
-        .order_by(JadwalKuliah.hari, JadwalKuliah.jam_mulai)
-        .all()
-    )
-    return render_template("jadwal.html", daftar=daftar, nama_hari=NAMA_HARI)
+    if request.method == "GET":
+        return _render_jadwal()
+
+    aksi = request.form.get("aksi")
+
+    if aksi == "manual":
+        try:
+            sesi, semester = validasi_jadwal_manual(request.form)
+        except ValidasiError as e:
+            flash(str(e), "error")
+            return _render_jadwal(form=request.form, status=400)
+        ditambah, _ = layanan_jadwal.simpan_jadwal([sesi], semester)
+        flash("Jadwal ditambahkan." if ditambah else "Jadwal itu sudah ada.", "sukses" if ditambah else "error")
+        return redirect(url_for("main.jadwal"))
+
+    if aksi == "impor":
+        berkas = request.files.get("berkas")
+        try:
+            semester = _ambil_semester(request.form)
+            if not berkas or not berkas.filename:
+                raise ValidasiError("Pilih file jadwal dulu (.csv, .xlsx, atau .ics).")
+        except ValidasiError as e:
+            flash(str(e), "error")
+            return _render_jadwal(status=400)
+
+        sesi, errors = layanan_jadwal.parse_file(berkas.read(), berkas.filename)
+        for pesan in errors[:10]:  # tampilkan maksimal 10 error supaya tidak membanjiri halaman
+            flash(pesan, "error")
+        if len(errors) > 10:
+            flash(f"... dan {len(errors) - 10} error lainnya.", "error")
+        if not sesi:
+            flash("Tidak ada jadwal yang bisa diimpor dari file itu.", "error")
+            return _render_jadwal(status=400)
+
+        ditambah, duplikat = layanan_jadwal.simpan_jadwal(sesi, semester)
+        flash(f"Impor selesai: {ditambah} sesi ditambahkan, {duplikat} duplikat dilewati.", "sukses")
+        return redirect(url_for("main.jadwal"))
+
+    flash("Aksi tidak dikenal.", "error")
+    return _render_jadwal(status=400)
+
+
+@main_bp.route("/jadwal/<int:id>/edit", methods=["GET", "POST"])
+def jadwal_edit(id):
+    item = _jadwal_atau_404(id)
+    if request.method == "POST":
+        try:
+            sesi, semester = validasi_jadwal_manual(request.form)
+        except ValidasiError as e:
+            flash(str(e), "error")
+            return render_template("jadwal_form.html", form=request.form, item=item, nama_hari=NAMA_HARI), 400
+
+        for kolom, nilai in sesi.items():
+            setattr(item, kolom, nilai)
+        item.semester = semester
+        db.session.commit()
+        flash("Jadwal diperbarui.", "sukses")
+        return redirect(url_for("main.jadwal", semester=item.semester))
+
+    form = {
+        "matkul": item.matkul,
+        "hari": str(item.hari),
+        "jam_mulai": item.jam_mulai.strftime("%H:%M"),
+        "jam_selesai": item.jam_selesai.strftime("%H:%M"),
+        "ruang": item.ruang or "",
+        "semester": item.semester or "",
+    }
+    return render_template("jadwal_form.html", form=form, item=item, nama_hari=NAMA_HARI)
+
+
+@main_bp.route("/jadwal/<int:id>/hapus", methods=["POST"])
+def jadwal_hapus(id):
+    item = _jadwal_atau_404(id)
+    semester = item.semester
+    db.session.delete(item)
+    db.session.commit()
+    flash(f"Jadwal {item.matkul} ({NAMA_HARI[item.hari]}) dihapus.", "sukses")
+    return redirect(url_for("main.jadwal", semester=semester))
 
 
 @main_bp.route("/insight")

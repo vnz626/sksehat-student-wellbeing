@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Edit Jadwal{% endblock %}
+{% block content %}
+<h1>Edit Jadwal</h1>
+<form method="post">
+  {% include "_jadwal_fields.html" %}
+  <p>
+    <button type="submit">Simpan</button>
+    <a href="{{ url_for('main.jadwal', semester=item.semester or '') }}">Batal</a>
+  </p>
+</form>
+{% endblock %}
