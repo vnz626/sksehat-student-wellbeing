@@ -19,12 +19,14 @@ def create_app(config_class=Config):
     # Hubungkan SQLAlchemy ke aplikasi
     db.init_app(app)
 
-    # Daftarkan blueprint halaman (routes/api.py menyusul di tahap berikutnya)
+    # Daftarkan blueprint halaman dan API
+    from routes.api import api_bp
     from routes.main import main_bp
     from routes.profil import profil_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(profil_bp)
+    app.register_blueprint(api_bp)
 
     register_commands(app)
     return app

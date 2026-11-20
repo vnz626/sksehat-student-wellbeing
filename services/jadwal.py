@@ -187,6 +187,56 @@ def parse_ics(isi_file):
     return sesi, errors
 
 
+BATAS_TEKS_KRS = 8000  # karakter; teks KRS satu semester jauh di bawah ini
+
+
+def parse_krs(teks):
+    """Mengubah teks KRS/SIAKAD yang ditempel menjadi daftar sesi lewat LLM.
+
+    Hasil LLM divalidasi ulang dengan validasi_sesi(), jadi data yang salah
+    tidak ikut tersimpan. Mengembalikan (daftar_sesi, daftar_error, penyedia).
+    Melempar llm.LLMError jika LLM tidak tersedia atau jawabannya rusak.
+    """
+    from services import llm
+
+    data, penyedia = llm.chat_json(
+        [
+            {"role": "system", "content": llm.PROMPT_KRS},
+            {"role": "user", "content": teks[:BATAS_TEKS_KRS]},
+        ],
+        temperature=0,
+        max_tokens=2048,
+        timeout=30,
+    )
+    baris = data.get("jadwal")
+    if not isinstance(baris, list):
+        raise llm.LLMError("jawaban LLM tidak berisi daftar 'jadwal'")
+
+    sesi, errors = [], []
+    for i, item in enumerate(baris, start=1):
+        if not isinstance(item, dict):
+            errors.append(f"Baris {i}: format tidak dikenali")
+            continue
+        try:
+            sesi.append(validasi_sesi(item))
+        except ValueError as e:
+            nama = str(item.get("matkul") or "").strip() or f"baris {i}"
+            errors.append(f"{nama}: {e}")
+    return sesi, errors, penyedia
+
+
+def sesi_ke_json(sesi):
+    """Sesi (dengan objek time) diubah menjadi dict yang bisa dikirim sebagai JSON."""
+    return {
+        "matkul": sesi["matkul"],
+        "hari": sesi["hari"],
+        "hari_nama": NAMA_HARI[sesi["hari"]],
+        "jam_mulai": sesi["jam_mulai"].strftime("%H:%M"),
+        "jam_selesai": sesi["jam_selesai"].strftime("%H:%M"),
+        "ruang": sesi["ruang"],
+    }
+
+
 def parse_file(isi_file, nama_file):
     """Memilih parser sesuai ekstensi file."""
     if nama_file.lower().endswith(".ics"):

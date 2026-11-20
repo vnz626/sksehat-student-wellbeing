@@ -187,6 +187,36 @@ def jadwal():
         flash(f"Impor selesai: {ditambah} sesi ditambahkan, {duplikat} duplikat dilewati.", "sukses")
         return redirect(url_for("main.jadwal"))
 
+    if aksi == "krs":
+        # Simpan hasil pratinjau teks KRS (sudah dicek/diedit user di tabel pratinjau)
+        try:
+            semester = _ambil_semester(request.form)
+        except ValidasiError as e:
+            flash(str(e), "error")
+            return _render_jadwal(status=400)
+
+        kolom = ["matkul", "hari", "jam_mulai", "jam_selesai", "ruang"]
+        nilai = {k: request.form.getlist(k) for k in kolom}
+        jumlah = len(nilai["matkul"])
+        if jumlah == 0 or any(len(v) != jumlah for v in nilai.values()):
+            flash("Tidak ada jadwal dari pratinjau yang bisa disimpan.", "error")
+            return _render_jadwal(status=400)
+
+        sesi, errors = [], []
+        for i in range(jumlah):
+            try:
+                sesi.append(layanan_jadwal.validasi_sesi({k: nilai[k][i] for k in kolom}))
+            except ValueError as e:
+                errors.append(f"Baris {i + 1} ({nilai['matkul'][i] or 'tanpa nama'}): {e}")
+        for pesan in errors:
+            flash(pesan, "error")
+        if not sesi:
+            return _render_jadwal(status=400)
+
+        ditambah, duplikat = layanan_jadwal.simpan_jadwal(sesi, semester)
+        flash(f"Jadwal dari KRS disimpan: {ditambah} sesi ditambahkan, {duplikat} duplikat dilewati.", "sukses")
+        return redirect(url_for("main.jadwal"))
+
     flash("Aksi tidak dikenal.", "error")
     return _render_jadwal(status=400)
 
