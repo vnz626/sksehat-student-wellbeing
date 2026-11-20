@@ -1,8 +1,12 @@
 """Klien LLM SKSehat dan prompt ekstraksi.
 
 Urutan penyedia:
-1. Groq API (llama-3.3-70b-versatile), format OpenAI-compatible, butuh GROQ_API_KEY.
+1. Groq API (default openai/gpt-oss-20b), format OpenAI-compatible, butuh GROQ_API_KEY.
 2. Cadangan lokal: Ollama (llama3.2:3b) di http://localhost:11434.
+
+Model Llama 3.3 70B di rancangan awal sudah tidak tersedia di Groq, jadi diganti
+gpt-oss-20b (paling cepat dan tetap akurat untuk ekstraksi). Model bisa diganti
+lewat GROQ_MODEL di .env tanpa mengubah kode.
 
 LLM hanya dipakai untuk mengubah teks menjadi data dan menyusun kalimat.
 Semua angka analisis tetap dihitung oleh kode sendiri.
@@ -19,9 +23,10 @@ from openai import OpenAI
 log = logging.getLogger(__name__)
 
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
-GROQ_MODEL = "llama-3.3-70b-versatile"
+GROQ_MODEL_DEFAULT = "openai/gpt-oss-20b"
 
-# Ollama bisa diarahkan ke alamat/model lain lewat .env (opsional)
+# Model dan alamat bisa diatur lewat .env (opsional)
+GROQ_MODEL = os.getenv("GROQ_MODEL") or GROQ_MODEL_DEFAULT
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
 

@@ -58,7 +58,7 @@ Mencatat, bertanya, dan menerima notifikasi tanpa membuka web: check-in malam, p
            ├──► Flask (routes) ──────┤             prediksi, insight, jadwal)
  Telegram ─┘    /api/bot/*           └── SQLite via SQLAlchemy
  (bot.py)       (token rahasia)                    │
-                                                   └── Groq API (Llama 3.3 70B)
+                                                   └── Groq API (gpt-oss-20b)
 ```
 
 - Web dan bot memakai backend serta modul layanan yang sama, sehingga hasilnya selalu konsisten.
@@ -74,7 +74,7 @@ Mencatat, bertanya, dan menerima notifikasi tanpa membuka web: check-in malam, p
 | Database | SQLite |
 | Machine learning | scikit-learn (K-Means, LinearRegression), pandas, NumPy |
 | Analisis sentimen | Leksikon InSet atau Naive Bayes bahasa Indonesia |
-| LLM | Groq API, `llama-3.3-70b-versatile` (OpenAI-compatible); cadangan lokal Ollama + Llama 3.2 3B |
+| LLM | Groq API, `openai/gpt-oss-20b` (OpenAI-compatible, dapat diganti via `GROQ_MODEL`); cadangan lokal Ollama + Llama 3.2 3B |
 | Bot | python-telegram-bot + JobQueue |
 | Frontend | Jinja2, Bootstrap 5, JavaScript (fetch) |
 | Visualisasi | Chart.js |
@@ -117,6 +117,8 @@ SECRET_KEY=ganti-dengan-string-acak
 
 # API key Groq untuk chatbot LLM
 GROQ_API_KEY=isi-api-key-groq
+# Opsional: ganti model Groq (default openai/gpt-oss-20b)
+# GROQ_MODEL=openai/gpt-oss-20b
 
 # Token bot Telegram dari @BotFather
 BOT_TOKEN=isi-token-bot-telegram
