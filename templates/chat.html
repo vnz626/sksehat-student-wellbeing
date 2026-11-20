@@ -2,5 +2,23 @@
 {% block title %}Chat{% endblock %}
 {% block content %}
 <h1>Chat</h1>
-<p>Chatbot belum tersedia.</p>
+
+<div id="riwayat-chat">
+  {% for c in riwayat %}
+    <p><strong>Kamu</strong> ({{ c.waktu.strftime('%d-%m %H:%M') }}{{ ', Telegram' if c.sumber == 'telegram' }}): {{ c.pesan }}</p>
+    <p><strong>SKSehat</strong>: {{ c.balasan }}</p>
+  {% else %}
+    <p id="chat-kosong">Belum ada obrolan. Coba ceritain harimu, misalnya "semalem cuma tidur 5 jam, laporan numpuk".</p>
+  {% endfor %}
+</div>
+
+<form id="form-chat" data-url="{{ url_for('api.chat') }}">
+  <p>
+    <input type="text" id="input-chat" name="pesan" maxlength="1000" size="60"
+           placeholder="Gimana harimu?" autocomplete="off" required>
+    <button type="submit" id="tombol-kirim">Kirim</button>
+  </p>
+</form>
+
+<script src="{{ url_for('static', filename='js/chat.js') }}"></script>
 {% endblock %}

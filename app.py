@@ -53,6 +53,19 @@ def register_commands(app):
 
         click.echo("Database siap: " + app.config["SQLALCHEMY_DATABASE_URI"])
 
+    @app.cli.command("hitung-sentimen")
+    def hitung_sentimen():
+        """Menghitung ulang skor sentimen semua catatan yang punya cerita."""
+        from models import CatatanHarian
+        from services.sentimen import skor_sentimen
+
+        jumlah = 0
+        for catatan in CatatanHarian.query.filter(CatatanHarian.cerita.isnot(None)):
+            catatan.sentimen = skor_sentimen(catatan.cerita)
+            jumlah += 1
+        db.session.commit()
+        click.echo(f"Sentimen {jumlah} catatan dihitung ulang.")
+
 
 app = create_app()
 

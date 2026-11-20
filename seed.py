@@ -30,6 +30,7 @@ from models import (
     Wrapped,
     db,
 )
+from services.sentimen import skor_sentimen
 
 random.seed(42)  # supaya hasil seeder selalu sama
 
@@ -198,10 +199,6 @@ def buat_catatan(tanggal, daftar_deadline):
         cerita = random.choice(CERITA_RINGAN)
         pemicu = None
 
-    # Sentimen sementara (-1..1) diperkirakan dari stres;
-    # dihitung ulang dengan model sentimen sungguhan di tahap 8.
-    sentimen = round(batasi((5.5 - stres) / 4.5 + random.gauss(0, 0.15), -1, 1), 2)
-
     return CatatanHarian(
         user_id=DEFAULT_USER_ID,
         tanggal=tanggal,
@@ -210,7 +207,7 @@ def buat_catatan(tanggal, daftar_deadline):
         olahraga=olahraga,
         stres=stres,
         cerita=cerita,
-        sentimen=sentimen,
+        sentimen=skor_sentimen(cerita),  # skor dari model sentimen (services/sentimen.py)
         pemicu=pemicu,
         updated_at=datetime.combine(tanggal, time(21, 30)),
     )

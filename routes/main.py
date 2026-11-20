@@ -8,7 +8,7 @@ from datetime import date, datetime
 
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 
-from models import DEFAULT_USER_ID, CatatanHarian, Deadline, JadwalKuliah, db
+from models import DEFAULT_USER_ID, CatatanHarian, ChatHistory, Deadline, JadwalKuliah, db
 from services import jadwal as layanan_jadwal
 from services.jadwal import NAMA_HARI
 
@@ -91,7 +91,14 @@ def dashboard():
 
 @main_bp.route("/chat")
 def chat():
-    return render_template("chat.html")
+    # 50 pesan terakhir (web dan Telegram), ditampilkan dari yang terlama
+    riwayat = (
+        ChatHistory.query.filter_by(user_id=DEFAULT_USER_ID)
+        .order_by(ChatHistory.waktu.desc(), ChatHistory.id.desc())
+        .limit(50)
+        .all()
+    )
+    return render_template("chat.html", riwayat=list(reversed(riwayat)))
 
 
 # ---------------------------------------------------------------------------
