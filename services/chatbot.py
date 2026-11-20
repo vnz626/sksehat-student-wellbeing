@@ -22,7 +22,9 @@ from services.sentimen import label_sentimen, skor_sentimen
 log = logging.getLogger(__name__)
 
 JENIS_VALID = {"catat", "tanya", "saran", "ngobrol"}
-TOPIK_VALID = {"ringkasan", "hari_ini", "prediksi", "prakiraan", "lainnya"}
+TOPIK_VALID = {"ringkasan", "hari_ini", "prediksi", "prakiraan", "lanjutan", "lainnya"}
+TANYA_STRES = "Stresnya hari ini di angka berapa (1-10)?"
+POLA_ANGKA_SAJA = re.compile(r"^\s*(\d+(?:[.,]\d+)?)\s*$")  # pesan berisi angka saja, misalnya "8"
 BATAS_PESAN = 1000  # karakter
 
 # Rentang wajar (sama dengan validasi form Riwayat)
@@ -75,13 +77,32 @@ def catatan_hari_ini(user_id=DEFAULT_USER_ID, tanggal=None):
     return CatatanHarian.query.filter_by(user_id=user_id, tanggal=tanggal or date.today()).first()
 
 
+KONTEKS_MAKS = timedelta(minutes=30)  # chat yang lebih lama dianggap percakapan lain
+
+
+def chat_terakhir(user_id=DEFAULT_USER_ID):
+    """Pesan dan balasan terakhir sebagai konteks percakapan, atau None jika tidak ada/sudah basi."""
+    terakhir = (
+        ChatHistory.query.filter_by(user_id=user_id)
+        .order_by(ChatHistory.waktu.desc(), ChatHistory.id.desc())
+        .first()
+    )
+    if terakhir is None or datetime.now() - terakhir.waktu > KONTEKS_MAKS:
+        return None
+    return terakhir
+
+
 # ---------------------------------------------------------------------------
 # 1. Ekstraksi (LLM + cadangan regex)
 # ---------------------------------------------------------------------------
 
-def ekstrak_llm(pesan):
+def ekstrak_llm(pesan, balasan_sebelumnya=None):
+    """Ekstraksi lewat LLM; pesan bot sebelumnya ikut dikirim supaya jawaban singkat ("8") dipahami."""
+    isi = f"Pesan: {pesan}"
+    if balasan_sebelumnya:
+        isi = f"Bot sebelumnya: {balasan_sebelumnya}\n" + isi
     data, _ = llm.chat_json(
-        [{"role": "system", "content": llm.PROMPT_EKSTRAKSI}, {"role": "user", "content": pesan}],
+        [{"role": "system", "content": llm.PROMPT_EKSTRAKSI}, {"role": "user", "content": isi}],
         temperature=0,
         max_tokens=400,
         timeout=8,
@@ -100,7 +121,7 @@ _PEMICU_REGEX = {
     "keuangan": r"uang|duit|bayar|\bkos\b|ukt|bokek|tagihan",
     "keluarga": r"keluarga|orang ?tua|ortu|\bayah\b|\bibu\b|mama|papa|adik|kakak",
     "hubungan": r"pacar|gebetan|\bteman\b|temen|sahabat|putus",
-    "kesehatan": r"sakit|demam|meriang|flu|pusing|maag|batuk",
+    "kesehatan": r"sakit|demam|meriang|flu|pusing|maag|batuk|enak badan",
 }
 
 
@@ -110,9 +131,19 @@ def ekstrak_regex(pesan):
     hasil = {"jenis": None, "tidur": None, "air": None, "olahraga": None, "stres": None,
              "pemicu": [], "topik": None, "balasan": None}
 
-    m = re.search(r"tidur\D{0,15}?(\d+(?:[.,]\d+)?)\s*jam", t) or re.search(r"(\d+(?:[.,]\d+)?)\s*jam\s*tidur", t)
+    # "tidur jam 1 ... bangun jam 6" -> lama tidur dihitung dari selisih jam
+    m = re.search(r"tidur\s+(?:jam|pukul)\s*(\d{1,2})(?:[.:](\d{2}))?(\s*malam)?.{0,40}?"
+                  r"bangun\s+(?:jam|pukul)\s*(\d{1,2})(?:[.:](\d{2}))?", t)
     if m:
-        hasil["tidur"] = m.group(1)
+        jam_tidur = int(m.group(1)) + int(m.group(2) or 0) / 60
+        if m.group(3) and 6 <= jam_tidur < 12:
+            jam_tidur += 12  # "jam 10 malam" = 22.00
+        jam_bangun = int(m.group(4)) + int(m.group(5) or 0) / 60
+        hasil["tidur"] = round((jam_bangun - jam_tidur) % 24, 1)
+    else:
+        m = re.search(r"tidur\D{0,15}?(\d+(?:[.,]\d+)?)\s*jam", t) or re.search(r"(\d+(?:[.,]\d+)?)\s*jam\s*tidur", t)
+        if m:
+            hasil["tidur"] = m.group(1)
     m = re.search(r"(\d+)\s*gelas", t)
     if m:
         hasil["air"] = m.group(1)
@@ -255,21 +286,25 @@ def simpan_catatan(data, pesan, user_id=DEFAULT_USER_ID, tanggal=None):
     return catatan, perubahan, errors
 
 
-def balasan_catat(catatan, perubahan, errors, pesan):
-    """Balasan template untuk pesan 'catat' (tanpa LLM supaya cepat)."""
-    bagian = []
+def balasan_catat(catatan, perubahan, errors, pesan, empati=None, sudah_tanya_stres=False):
+    """Balasan untuk pesan 'catat': kalimat empati dari LLM (jika ada) + konfirmasi data dari kode.
+
+    Angka selalu ditulis oleh kode (bukan LLM) supaya pasti sama dengan yang tersimpan.
+    Stres hanya ditanyakan jika belum dicatat dan belum ditanyakan di balasan sebelumnya.
+    """
+    bagian = [empati.strip()] if empati else []
 
     if "tidur" in perubahan:
         t = perubahan["tidur"]
         if t < 6:
-            komentar = "Itu kurang banget, ya."
+            komentar = "itu kurang banget."
         elif t < 7:
-            komentar = "Agak kurang dari 7 jam."
+            komentar = "agak kurang dari 7 jam."
         elif t <= 9:
-            komentar = "Pas, mantap."
+            komentar = "pas, mantap."
         else:
-            komentar = "Lumayan panjang tidurnya."
-        bagian.append(f"Tidur {angka(t)} jam tercatat. {komentar}")
+            komentar = "lumayan panjang."
+        bagian.append(f"Tidur {angka(t)} jam tercatat, {komentar}")
 
     tercatat = []
     if "air" in perubahan:
@@ -277,16 +312,22 @@ def balasan_catat(catatan, perubahan, errors, pesan):
     if "olahraga" in perubahan:
         tercatat.append(f"olahraga {perubahan['olahraga']['total']} menit")
     if tercatat:
-        bagian.append("Mantap, " + " dan ".join(tercatat) + " hari ini sudah tercatat.")
+        teks = " dan ".join(tercatat)
+        bagian.append(teks[0].upper() + teks[1:] + " hari ini sudah tercatat.")
 
     if "stres" in perubahan:
-        bagian.append(f"Stres {perubahan['stres']} tercatat.")
+        nilai = perubahan["stres"]
+        if nilai <= 3:
+            bagian.append(f"Stres {nilai} tercatat, syukurlah hari ini cukup tenang.")
+        else:
+            # stres >= 7 sudah dikomentari oleh saran pertama ("Stresmu tinggi...")
+            bagian.append(f"Stres {nilai} tercatat.")
         saran = insight.rekomendasi_hari_ini(catatan)
         if saran:
-            bagian.append(saran[0])
+            bagian.append(saran[0])  # satu saran diselipkan setelah stres dicatat
 
     if not bagian:
-        # Cerita saja tanpa angka
+        # Cerita tanpa angka dan tanpa kalimat empati dari LLM (misalnya mode regex)
         label = label_sentimen(skor_sentimen(pesan))
         if label == "negatif":
             bagian.append("Makasih udah cerita. Kedengarannya hari ini berat, ya.")
@@ -296,8 +337,8 @@ def balasan_catat(catatan, perubahan, errors, pesan):
             bagian.append("Oke, ceritamu sudah kucatat.")
 
     bagian.extend(errors)
-    if catatan.stres is None and "stres" not in perubahan:
-        bagian.append("Stresnya hari ini di angka berapa (1-10)?")
+    if catatan.stres is None and "stres" not in perubahan and not sudah_tanya_stres:
+        bagian.append(TANYA_STRES)
     return " ".join(bagian)
 
 
@@ -375,17 +416,18 @@ def fakta_prediksi(data, user_id=DEFAULT_USER_ID):
     nilai = prediksi.prediksi_stres(**masukan, user_id=user_id, hasil_latih=hasil_latih)
     dasar = prediksi.prediksi_stres(**biasa, user_id=user_id, hasil_latih=hasil_latih)
     selisih = round(nilai - dasar, 1)
+    arah = "turun" if selisih < 0 else "naik" if selisih > 0 else "tetap"
+    perubahan = f"{arah} {angka(abs(selisih))} poin" if selisih else "tetap sama"
     fakta = {
         "pengandaian": {k: data[k] for k in prediksi.FITUR_HARIAN if data.get(k) is not None},
-        "kebiasaan_7_hari": biasa,
-        "prediksi_stres": nilai,
-        "prediksi_stres_dengan_kebiasaan_sekarang": dasar,
-        "selisih": selisih,
-        "skala": "1-10",
+        "kebiasaanmu_7_hari_terakhir": biasa,
+        "perkiraan_stres_kalau_begitu": nilai,
+        "perkiraan_stres_kalau_kebiasaan_tetap": dasar,
+        "perubahan": perubahan,
+        "catatan": "perkiraan dari pola catatanmu sendiri, skala 1-10",
     }
-    arah = "turun" if selisih < 0 else "naik" if selisih > 0 else "tetap"
-    teks = f"Prediksinya sekitar {angka(nilai)}"
-    teks += f", {arah} {angka(abs(selisih))} poin dari kebiasaanmu sekarang." if selisih else ", sama seperti kebiasaanmu sekarang."
+    teks = f"Kalau begitu, stresmu diperkirakan sekitar {angka(nilai)}"
+    teks += f", {perubahan} dibanding kebiasaanmu sekarang ({angka(dasar)})." if selisih else ", sama seperti kebiasaanmu sekarang."
     return fakta, teks
 
 
@@ -400,16 +442,22 @@ def _rapikan_angka(nilai):
     return nilai
 
 
-def susun_kalimat(pesan, fakta, cadangan):
-    """LLM menyusun kalimat dari fakta hasil hitungan backend; cadangan dipakai jika LLM gagal."""
+def susun_kalimat(pesan, fakta, cadangan, sebelumnya=None):
+    """LLM menyusun kalimat dari fakta hasil hitungan backend; cadangan dipakai jika LLM gagal.
+
+    `sebelumnya` (ChatHistory terakhir) dikirim sebagai konteks supaya jawaban nyambung.
+    """
     fakta = _rapikan_angka(fakta)
+    isi = ""
+    if sebelumnya is not None:
+        isi += f"Percakapan sebelumnya:\nMahasiswa: {sebelumnya.pesan}\nSKSehat: {sebelumnya.balasan}\n\n"
+    isi += (f"Pesan mahasiswa sekarang: {pesan}\n"
+            f"Data dari sistem (JSON): {json.dumps(fakta, ensure_ascii=False, default=str, separators=(',', ':'))}")
     try:
         teks, _ = llm.chat(
             [
                 {"role": "system", "content": llm.PROMPT_JAWAB},
-                {"role": "user", "content": f"Pertanyaan mahasiswa: {pesan}\n"
-                                            f"Data dari sistem (JSON): "
-                                            f"{json.dumps(fakta, ensure_ascii=False, default=str, separators=(',', ':'))}"},
+                {"role": "user", "content": isi},
             ],
             temperature=0.4,
             max_tokens=300,
@@ -423,15 +471,22 @@ def susun_kalimat(pesan, fakta, cadangan):
         return cadangan
 
 
-def jawab_tanya(data, pesan, user_id=DEFAULT_USER_ID, pakai_llm=True):
+def jawab_tanya(data, pesan, user_id=DEFAULT_USER_ID, pakai_llm=True, sebelumnya=None):
     topik = data.get("topik") or "lainnya"
+    if topik == "lanjutan" and sebelumnya is not None:
+        # "maksudnya?" -> jelaskan ulang jawaban sebelumnya dengan lebih sederhana
+        fakta = {"jawaban_sebelumnya": sebelumnya.balasan,
+                 "instruksi": "jelaskan ARTI jawaban sebelumnya dengan kata-kata lain yang lebih sederhana, "
+                              "seperti menjelaskan ke teman; jangan mengulang kalimatnya, tanpa angka baru"}
+        cadangan = "Maksudku: " + sebelumnya.balasan
+        return susun_kalimat(pesan, fakta, cadangan, sebelumnya) if pakai_llm else cadangan
     if topik == "prakiraan":
         # Prakiraan Cuaca Mental dibuat di tahap prakiraan; sementara dijawab apa adanya
         return ("Prakiraan Cuaca Mental belum tersedia, nanti bakal muncul di Beranda. "
                 "Sementara itu, cek deadline terdekatmu di halaman Deadline ya.")
     if topik == "prediksi":
         fakta, cadangan = fakta_prediksi(data, user_id)
-        if fakta is None or not fakta.get("prediksi_stres"):
+        if fakta is None or not fakta.get("perkiraan_stres_kalau_begitu"):
             return cadangan
     elif topik == "hari_ini":
         fakta, cadangan = fakta_hari_ini(user_id)
@@ -439,16 +494,16 @@ def jawab_tanya(data, pesan, user_id=DEFAULT_USER_ID, pakai_llm=True):
         fakta, cadangan = fakta_ringkasan(user_id)
         if topik == "lainnya":
             fakta = {"ringkasan_7_hari": fakta, "hari_ini": fakta_hari_ini(user_id)[0]}
-    return susun_kalimat(pesan, fakta, cadangan) if pakai_llm else cadangan
+    return susun_kalimat(pesan, fakta, cadangan, sebelumnya) if pakai_llm else cadangan
 
 
-def jawab_saran(pesan, user_id=DEFAULT_USER_ID, pakai_llm=True):
+def jawab_saran(pesan, user_id=DEFAULT_USER_ID, pakai_llm=True, sebelumnya=None):
     saran = insight.rekomendasi_hari_ini(catatan_hari_ini(user_id), user_id=user_id)
     cadangan = " ".join(saran)
     if not pakai_llm:
         return cadangan
     fakta = {"saran_dari_sistem": saran, "instruksi": "sampaikan semua saran ini dengan bahasa santai, jangan tambah saran lain"}
-    return susun_kalimat(pesan, fakta, cadangan)
+    return susun_kalimat(pesan, fakta, cadangan, sebelumnya)
 
 
 # ---------------------------------------------------------------------------
@@ -465,7 +520,8 @@ def proses_pesan(pesan, sumber="web", user_id=DEFAULT_USER_ID):
 
     Mengembalikan dict: {"balasan", "jenis", "tersimpan", "mode"}
     - tersimpan: perubahan catatan hari ini (None jika tidak ada yang dicatat)
-    - mode: "llm" atau "regex" (cadangan saat LLM tidak tersedia)
+    - mode: "llm", "regex" (cadangan saat LLM tidak tersedia), atau "aturan" (tanpa LLM:
+      pesan krisis dan jawaban angka atas pertanyaan stres)
     """
     pesan = (pesan or "").strip()[:BATAS_PESAN]
 
@@ -474,10 +530,21 @@ def proses_pesan(pesan, sumber="web", user_id=DEFAULT_USER_ID):
         simpan_riwayat(pesan, BALASAN_KRISIS, "ngobrol", sumber, user_id)
         return {"balasan": BALASAN_KRISIS, "jenis": "ngobrol", "tersimpan": None, "mode": "aturan"}
 
+    sebelumnya = chat_terakhir(user_id)
+    sudah_tanya_stres = sebelumnya is not None and TANYA_STRES in (sebelumnya.balasan or "")
     cadangan = ekstrak_regex(pesan)
+
+    angka_saja = POLA_ANGKA_SAJA.match(pesan)
+    if angka_saja and sudah_tanya_stres:
+        # Jawaban "8" atas pertanyaan stres: langsung dicatat sebagai stres tanpa LLM
+        mentah = {"jenis": "catat", "stres": angka_saja.group(1)}
+        mode = "aturan"
+    else:
+        mentah, mode = None, None
     try:
-        mentah = ekstrak_llm(pesan)
-        mode = "llm"
+        if mentah is None:
+            mentah = ekstrak_llm(pesan, sebelumnya.balasan if sebelumnya else None)
+            mode = "llm"
         # Pengaman: pengandaian tanpa angka dari LLM -> ambil angka pengandaian dari regex
         if str(mentah.get("topik")).lower() == "prediksi" and all(mentah.get(k) is None for k in prediksi.FITUR_HARIAN):
             for k in prediksi.FITUR_HARIAN:
@@ -490,7 +557,7 @@ def proses_pesan(pesan, sumber="web", user_id=DEFAULT_USER_ID):
     mentah["_pesan"] = pesan  # dipakai pengaman topik di validasi
     data, errors = validasi_ekstraksi(mentah)
     jenis = data["jenis"]
-    pakai_llm = mode == "llm"
+    pakai_llm = mode in ("llm", "aturan")
     ada_data = any(data.get(k) is not None for k in RENTANG) or bool(data["pemicu"])
     tersimpan = None
 
@@ -501,13 +568,19 @@ def proses_pesan(pesan, sumber="web", user_id=DEFAULT_USER_ID):
     elif jenis == "catat" or (jenis == "saran" and ada_data):
         catatan, tersimpan, err_simpan = simpan_catatan(data, pesan, user_id)
         if jenis == "catat":
-            balasan = balasan_catat(catatan, tersimpan, errors + err_simpan, pesan)
+            # Kalimat empati hanya untuk pesan yang berisi cerita (ada pemicu, bernada positif/negatif,
+            # atau tanpa angka). Laporan angka biasa ("minum 2 gelas") cukup dikonfirmasi, supaya LLM
+            # tidak salah menilai jumlahnya.
+            ada_angka = any(data.get(k) is not None for k in RENTANG)
+            bercerita = bool(data["pemicu"]) or label_sentimen(skor_sentimen(pesan)) != "netral" or not ada_angka
+            empati = data.get("balasan") if mode == "llm" and bercerita else None
+            balasan = balasan_catat(catatan, tersimpan, errors + err_simpan, pesan, empati, sudah_tanya_stres)
         else:
-            balasan = jawab_saran(pesan, user_id, pakai_llm)
+            balasan = jawab_saran(pesan, user_id, pakai_llm, sebelumnya)
     elif jenis == "tanya":
-        balasan = jawab_tanya(data, pesan, user_id, pakai_llm)
+        balasan = jawab_tanya(data, pesan, user_id, pakai_llm, sebelumnya)
     elif jenis == "saran":
-        balasan = jawab_saran(pesan, user_id, pakai_llm)
+        balasan = jawab_saran(pesan, user_id, pakai_llm, sebelumnya)
     else:
         balasan = data.get("balasan") or cadangan.get("balasan") or \
             "Aku di sini kok. Ceritain aja harimu, atau tanya soal kebiasaanmu ya."
